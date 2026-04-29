@@ -12,6 +12,10 @@ struct GotoApp: App {
             appCommands
         }
         .defaultSize(width: 800, height: 600)
+
+        Settings {
+            SettingsView()
+        }
     }
 
     @CommandsBuilder

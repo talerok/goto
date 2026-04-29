@@ -9,10 +9,16 @@ extension AppState {
         let selected = selectedFileItems
         guard !selected.isEmpty else { return }
 
-        // Open all files with their default apps.
+        // Open all files with their default apps (or user-configured default).
         let files = selected.filter { !$0.isDirectory }
         for file in files {
-            FileSystemService.open(file.url)
+            let ext = file.url.pathExtension.lowercased()
+            if let bundleID = FileAssociationService.defaultApp(forKey: ext),
+               let appURL = FileAssociationService.appURL(forBundleID: bundleID) {
+                FileAssociationService.open(file.url, withAppAt: appURL)
+            } else {
+                FileSystemService.open(file.url)
+            }
         }
 
         // Navigate to the first selected directory (navigating multiple would race).

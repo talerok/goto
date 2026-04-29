@@ -28,6 +28,20 @@ private enum CellID {
     static let size = NSUserInterfaceItemIdentifier("SizeCell")
 }
 
+// MARK: - Open With Context
+
+/// Holds the file URL and target app URL for "Open With" menu items.
+/// Must be a class (not struct) because NSMenuItem.representedObject is AnyObject.
+private final class OpenWithContext: NSObject, @unchecked Sendable {
+    let fileURL: URL
+    let appURL: URL
+
+    init(fileURL: URL, appURL: URL) {
+        self.fileURL = fileURL
+        self.appURL = appURL
+    }
+}
+
 // MARK: - Table View Subclass
 
 /// NSTableView subclass that adjusts selection on right-click (Finder behavior).
@@ -335,7 +349,13 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         if item.isDirectory {
             Task { await parent.appState.navigate(to: item.url) }
         } else {
-            FileSystemService.open(item.url)
+            let ext = item.url.pathExtension.lowercased()
+            if let bundleID = FileAssociationService.defaultApp(forKey: ext),
+               let appURL = FileAssociationService.appURL(forBundleID: bundleID) {
+                FileAssociationService.open(item.url, withAppAt: appURL)
+            } else {
+                FileSystemService.open(item.url)
+            }
         }
     }
 
@@ -393,7 +413,9 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             addMenuItem(to: menu, title: "Open", action: #selector(ctxOpen))
         }
         if let item = single {
-            addMenuItem(to: menu, title: "Open With…", action: #selector(ctxOpenWith(_:)), representedObject: item)
+            let openWithItem = NSMenuItem(title: "Open With", action: nil, keyEquivalent: "")
+            openWithItem.submenu = buildOpenWithSubmenu(for: item)
+            menu.addItem(openWithItem)
         }
         if let item = single, item.isDirectory {
             addMenuItem(to: menu, title: "Open in New Window", action: #selector(ctxOpenInNewWindow(_:)), representedObject: item)
@@ -434,6 +456,58 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         return menu
     }
 
+    // MARK: - Open With Submenu
+
+    private func buildOpenWithSubmenu(for item: FileItem) -> NSMenu {
+        let submenu = NSMenu(title: "Open With")
+        let key = item.isDirectory ? "folder" : item.url.pathExtension.lowercased()
+
+        // User-configured default at top
+        var customBundleID: String?
+        if let bundleID = FileAssociationService.defaultApp(forKey: key),
+           let appURL = FileAssociationService.appURL(forBundleID: bundleID) {
+            customBundleID = bundleID
+            let name = FileAssociationService.appDisplayName(at: appURL)
+            let menuItem = NSMenuItem(title: "\(name) (Default)", action: #selector(ctxOpenWithApp(_:)), keyEquivalent: "")
+            menuItem.target = self
+            menuItem.representedObject = OpenWithContext(fileURL: item.url, appURL: appURL)
+            menuItem.image = appIcon(at: appURL)
+            submenu.addItem(menuItem)
+            submenu.addItem(.separator())
+        }
+
+        // System-recommended apps
+        let recommended = NSWorkspace.shared.urlsForApplications(toOpen: item.url)
+        for appURL in recommended {
+            if let customID = customBundleID,
+               let bundle = Bundle(url: appURL),
+               bundle.bundleIdentifier == customID {
+                continue
+            }
+            let name = FileAssociationService.appDisplayName(at: appURL)
+            let menuItem = NSMenuItem(title: name, action: #selector(ctxOpenWithApp(_:)), keyEquivalent: "")
+            menuItem.target = self
+            menuItem.representedObject = OpenWithContext(fileURL: item.url, appURL: appURL)
+            menuItem.image = appIcon(at: appURL)
+            submenu.addItem(menuItem)
+        }
+
+        // "Other…"
+        if submenu.numberOfItems > 0 { submenu.addItem(.separator()) }
+        let otherItem = NSMenuItem(title: "Other…", action: #selector(ctxOpenWithOther(_:)), keyEquivalent: "")
+        otherItem.target = self
+        otherItem.representedObject = item
+        submenu.addItem(otherItem)
+
+        return submenu
+    }
+
+    private func appIcon(at appURL: URL) -> NSImage {
+        let icon = NSWorkspace.shared.icon(forFile: appURL.path(percentEncoded: false))
+        icon.size = NSSize(width: 16, height: 16)
+        return icon
+    }
+
     private func addMenuItem(to menu: NSMenu, title: String, action: Selector, representedObject: Any? = nil) {
         let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
         item.target = self
@@ -456,7 +530,12 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         parent.appState.openSelectedItems()
     }
 
-    @objc private func ctxOpenWith(_ sender: NSMenuItem) {
+    @objc private func ctxOpenWithApp(_ sender: NSMenuItem) {
+        guard let ctx = sender.representedObject as? OpenWithContext else { return }
+        FileAssociationService.open(ctx.fileURL, withAppAt: ctx.appURL)
+    }
+
+    @objc private func ctxOpenWithOther(_ sender: NSMenuItem) {
         guard let item = sender.representedObject as? FileItem else { return }
         FileSystemService.openWith(item.url)
     }
