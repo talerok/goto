@@ -1,5 +1,7 @@
 import AppKit
 
+private let iconDisplaySize = NSSize(width: 18, height: 18)
+
 /// Provides file/folder icons with caching. Icons are loaded off the main thread.
 actor IconProvider {
     /// Shared singleton.
@@ -7,6 +9,7 @@ actor IconProvider {
 
     /// Cache keyed by extension (files) or full path (directories, special items).
     private var cache: [String: NSImage] = [:]
+    private static let maxCacheSize = 500
 
     /// Get the icon for a file item. Returns a cached icon if available.
     static func icon(for item: FileItem) async -> NSImage {
@@ -14,24 +17,32 @@ actor IconProvider {
     }
 
     private func getIcon(for item: FileItem) async -> NSImage {
-        let cacheKey: String
-        if item.isDirectory {
-            cacheKey = "dir:" + item.url.path(percentEncoded: false)
-        } else {
-            let ext = item.url.pathExtension.lowercased()
-            cacheKey = "ext:" + (ext.isEmpty ? "__none__" : ext)
-        }
+        let cacheKey = self.cacheKey(for: item)
 
         if let cached = cache[cacheKey] {
             return cached
+        }
+
+        // Evict if cache grows too large — keep extension-based entries (shared), drop path-based
+        if cache.count > Self.maxCacheSize {
+            cache = cache.filter { $0.key.hasPrefix("ext:") }
         }
 
         let path = item.url.path(percentEncoded: false)
         let icon = await MainActor.run {
             NSWorkspace.shared.icon(forFile: path)
         }
-        icon.size = NSSize(width: 18, height: 18)
+        icon.size = iconDisplaySize
         cache[cacheKey] = icon
         return icon
+    }
+
+    private func cacheKey(for item: FileItem) -> String {
+        if item.isDirectory {
+            return "dir:" + item.url.path(percentEncoded: false)
+        } else {
+            let ext = item.url.pathExtension.lowercased()
+            return "ext:" + (ext.isEmpty ? "__none__" : ext)
+        }
     }
 }

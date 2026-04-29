@@ -38,6 +38,7 @@ struct AddressTextField: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: KeyInterceptingTextField, context: Context) {
+        context.coordinator.parent = self
         nsView.onFocusChange = { focused in
             self.isFocused = focused
         }
@@ -98,6 +99,7 @@ struct AddressTextField: NSViewRepresentable {
 }
 
 /// NSTextField subclass that tracks focus state.
+@MainActor
 final class KeyInterceptingTextField: NSTextField {
     var onFocusChange: ((Bool) -> Void)?
 

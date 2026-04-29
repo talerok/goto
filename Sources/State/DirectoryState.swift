@@ -13,6 +13,9 @@ final class DirectoryState {
     private(set) var isLoading = false
     var error: String?
 
+    /// Monotonic counter to discard stale loads after rapid navigation.
+    private var loadGeneration = 0
+
     var showHiddenFiles = false {
         didSet { applyFilterAndSort() }
     }
@@ -23,15 +26,19 @@ final class DirectoryState {
 
     /// Load the contents of a directory.
     func load(directory url: URL) async {
+        loadGeneration += 1
+        let myGeneration = loadGeneration
         isLoading = true
-        error = nil
 
         do {
             // Always fetch all items (including hidden) and filter in-memory
             let allItems = try await FileSystemService.listDirectory(at: url, showHidden: true)
+            guard myGeneration == loadGeneration else { return }
             rawItems = allItems
             applyFilterAndSort()
+            error = nil
         } catch let err as NSError {
+            guard myGeneration == loadGeneration else { return }
             if err.domain == NSCocoaErrorDomain && err.code == NSFileReadNoPermissionError {
                 error = "Permission denied — grant Full Disk Access in System Settings → Privacy & Security."
             } else {

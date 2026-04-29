@@ -86,5 +86,8 @@ struct AddressBarView: View {
 
         appState.addressBar.dismissSuggestions()
         Task { await appState.navigateFromAddressBar(to: resolved) }
+        DispatchQueue.main.async {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
     }
 }

@@ -50,6 +50,12 @@ extension SortCriteria {
                 else { result = lSize < rSize ? .orderedAscending : .orderedDescending }
             }
 
+            // Tiebreaker: fall back to name for stable ordering
+            if result == .orderedSame && field != .name {
+                let nameCmp = lhs.name.localizedStandardCompare(rhs.name)
+                return nameCmp == .orderedAscending
+            }
+
             switch direction {
             case .ascending:
                 return result == .orderedAscending

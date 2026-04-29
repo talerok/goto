@@ -1,12 +1,19 @@
+import Quartz
 import SwiftUI
+
+private let typeAheadTimeout: TimeInterval = 0.8
 
 /// Root application state. Coordinates navigation, directory loading, and the address bar.
 @Observable
 @MainActor
 final class AppState {
-    let navigation = NavigationState()
+    let navigation: NavigationState
     let directory = DirectoryState()
     let addressBar = AddressBarState()
+
+    init(startingDirectory: URL? = nil) {
+        self.navigation = NavigationState(startingDirectory: startingDirectory)
+    }
 
     /// Currently selected file item IDs (paths).
     var selection: Set<String> = []
@@ -16,6 +23,12 @@ final class AppState {
 
     /// Items pending trash (set before showing confirmation).
     var pendingTrashItems: [FileItem] = []
+
+    /// Item currently being renamed (nil when not renaming).
+    var renamingItem: FileItem?
+
+    /// Text in the rename field.
+    var renameText = ""
 
     // MARK: - FSEvents
 
@@ -44,6 +57,17 @@ final class AppState {
         QuickLookCoordinator.shared.toggle(urls: urls)
     }
 
+    /// Update the Quick Look panel when selection changes while it's open.
+    func updateQuickLookIfVisible() {
+        guard let panel = QLPreviewPanel.shared(), panel.isVisible else { return }
+        let urls = selectedFileItems.map(\.url)
+        if urls.isEmpty {
+            panel.orderOut(nil)
+        } else {
+            QuickLookCoordinator.shared.update(urls: urls)
+        }
+    }
+
     // MARK: - Type-ahead Search
 
     private var typeAheadBuffer = ""
@@ -54,19 +78,26 @@ final class AppState {
         typeAheadTimer?.invalidate()
         typeAheadBuffer.append(character)
 
-        // Find the first item whose name starts with the typed prefix (case-insensitive)
+        let bufferLower = typeAheadBuffer.lowercased()
         if let match = directory.items.first(where: {
             $0.name.localizedCaseInsensitiveCompare(typeAheadBuffer) == .orderedSame
-                || $0.name.lowercased().hasPrefix(typeAheadBuffer.lowercased())
+                || $0.name.lowercased().hasPrefix(bufferLower)
         }) {
             selection = [match.id]
         }
 
-        typeAheadTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: false) { [weak self] _ in
+        typeAheadTimer = Timer.scheduledTimer(withTimeInterval: typeAheadTimeout, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.typeAheadBuffer = ""
             }
         }
+    }
+
+    /// Reset type-ahead state. Called on directory changes.
+    private func resetTypeAhead() {
+        typeAheadTimer?.invalidate()
+        typeAheadTimer = nil
+        typeAheadBuffer = ""
     }
 
     // MARK: - Navigation
@@ -74,7 +105,6 @@ final class AppState {
     /// Reload the current directory contents without touching the address bar text.
     func loadCurrentDirectory() async {
         await directory.load(directory: navigation.currentDirectory)
-        startWatching()
     }
 
     /// Sync address bar text to the current directory path.
@@ -82,130 +112,53 @@ final class AppState {
         addressBar.syncToPath(navigation.currentDirectory.path(percentEncoded: false))
     }
 
+    /// Common state reset when navigating to a different directory.
+    private func prepareForNavigation() {
+        selection.removeAll()
+        resetTypeAhead()
+        syncAddressBar()
+        startWatching()
+    }
+
     /// Navigate to a directory and load its contents.
     func navigate(to url: URL) async {
         navigation.navigate(to: url)
-        selection.removeAll()
-        syncAddressBar()
+        prepareForNavigation()
         await loadCurrentDirectory()
     }
 
     /// Navigate from the address bar (also records in address bar history).
     func navigateFromAddressBar(to url: URL) async {
         navigation.navigateFromAddressBar(to: url)
-        selection.removeAll()
-        syncAddressBar()
+        prepareForNavigation()
         await loadCurrentDirectory()
+    }
+
+    /// Apply a navigation mutation (back/forward/up) and reload.
+    private func performNavigation(_ mutation: () -> Void) {
+        mutation()
+        prepareForNavigation()
+        Task { await loadCurrentDirectory() }
     }
 
     func navigateBack() {
-        navigation.goBack()
-        selection.removeAll()
-        syncAddressBar()
-        Task { await loadCurrentDirectory() }
+        performNavigation { navigation.goBack() }
     }
 
     func navigateForward() {
-        navigation.goForward()
-        selection.removeAll()
-        syncAddressBar()
-        Task { await loadCurrentDirectory() }
+        performNavigation { navigation.goForward() }
     }
 
     func navigateUp() {
-        navigation.goUp()
-        selection.removeAll()
-        syncAddressBar()
-        Task { await loadCurrentDirectory() }
-    }
-
-    // MARK: - File Operations
-
-    /// Open the selected items. Directories navigate, files open with default app.
-    func openSelectedItems() {
-        let selected = selectedFileItems
-        guard !selected.isEmpty else { return }
-
-        if selected.count == 1, let item = selected.first, item.isDirectory {
-            Task { await navigate(to: item.url) }
-            return
-        }
-
-        for item in selected {
-            if item.isDirectory {
-                Task { await navigate(to: item.url) }
-            } else {
-                FileSystemService.open(item.url)
-            }
-        }
-    }
-
-    /// Initiate trash for selected items. Shows confirmation if multiple items are selected.
-    func trashSelectedItems() {
-        let selected = selectedFileItems
-        guard !selected.isEmpty else { return }
-
-        if selected.count > 1 {
-            pendingTrashItems = selected
-            showTrashConfirmation = true
-        } else {
-            Task { await performTrash(selected) }
-        }
-    }
-
-    /// Execute the actual trash operation.
-    func performTrash(_ items: [FileItem]) async {
-        let failures = await FileSystemService.moveToTrash(items.map(\.url))
-        if !failures.isEmpty {
-            directory.error = "Failed to trash \(failures.count) item(s)."
-        }
-        await loadCurrentDirectory()
-    }
-
-    /// Confirm and execute the pending trash.
-    func confirmTrash() {
-        let items = pendingTrashItems
-        pendingTrashItems = []
-        showTrashConfirmation = false
-        Task { await performTrash(items) }
-    }
-
-    // MARK: - Rename
-
-    var renamingItem: FileItem?
-    var renameText = ""
-
-    func startRenaming(_ item: FileItem) {
-        renamingItem = item
-        renameText = item.name
-    }
-
-    func commitRename() {
-        guard let item = renamingItem else { return }
-        let newName = renameText.trimmingCharacters(in: .whitespaces)
-        guard !newName.isEmpty, newName != item.name else {
-            cancelRename()
-            return
-        }
-
-        let destination = item.url.deletingLastPathComponent().appending(path: newName)
-        Task {
-            do {
-                try await FileSystemService.rename(item.url, to: destination)
-            } catch {
-                directory.error = "Rename failed: \(error.localizedDescription)"
-            }
-            cancelRename()
-            await loadCurrentDirectory()
-        }
-    }
-
-    func cancelRename() {
-        renamingItem = nil
-        renameText = ""
+        performNavigation { navigation.goUp() }
     }
 
     // MARK: - Helpers
+
+    /// Select all items in the current directory.
+    func selectAll() {
+        selection = Set(directory.items.map(\.id))
+    }
 
     var selectedFileItems: [FileItem] {
         directory.items.filter { selection.contains($0.id) }

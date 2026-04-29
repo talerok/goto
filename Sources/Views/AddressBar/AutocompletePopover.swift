@@ -6,22 +6,23 @@ struct AutocompletePopover: View {
     let selectedIndex: Int?
     let onSelect: (URL) -> Void
 
-    private let maxVisible = 10
+    private static let maxVisible = 10
+    private static let rowHeight: CGFloat = 32
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(suggestions.enumerated()), id: \.offset) { index, url in
+                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, url in
                         suggestionRow(url, index: index)
                     }
                 }
                 .padding(.vertical, 4)
             }
-            .frame(maxHeight: CGFloat(min(suggestions.count, maxVisible)) * 32 + 8)
+            .frame(maxHeight: CGFloat(min(suggestions.count, Self.maxVisible)) * Self.rowHeight + 8)
             .onChange(of: selectedIndex) { _, newValue in
-                if let idx = newValue {
-                    proxy.scrollTo(idx, anchor: .center)
+                if let idx = newValue, suggestions.indices.contains(idx) {
+                    proxy.scrollTo(suggestions[idx], anchor: .center)
                 }
             }
         }
@@ -63,6 +64,6 @@ struct AutocompletePopover: View {
             )
         }
         .buttonStyle(.plain)
-        .id(index)
+        .id(url)
     }
 }

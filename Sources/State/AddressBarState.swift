@@ -155,11 +155,3 @@ final class AddressBarState {
         return String(first.prefix(prefix.count))
     }
 }
-
-extension FileSystemService {
-    /// Quick check whether a path points to a directory.
-    static func isDirectory(_ path: String) -> Bool {
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
-    }
-}

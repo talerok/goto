@@ -175,8 +175,39 @@ enum FileSystemService {
         }
     }
 
-    /// Check whether a given directory is accessible.
-    static func isAccessible(_ url: URL) -> Bool {
-        FileManager.default.isReadableFile(atPath: url.path(percentEncoded: false))
+    /// Copy a file or directory to a destination.
+    static func copyFile(from source: URL, to destination: URL) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try FileManager.default.copyItem(at: source, to: destination)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Generate a unique destination path, appending " 2", " 3", etc. if the name already exists.
+    static func uniqueDestination(for source: URL, in directory: URL) -> URL {
+        let name = source.deletingPathExtension().lastPathComponent
+        let ext = source.pathExtension
+        var dest = directory.appending(path: source.lastPathComponent)
+        var counter = 2
+        let fm = FileManager.default
+
+        while fm.fileExists(atPath: dest.path(percentEncoded: false)) {
+            let newName = ext.isEmpty ? "\(name) \(counter)" : "\(name) \(counter).\(ext)"
+            dest = directory.appending(path: newName)
+            counter += 1
+        }
+        return dest
+    }
+
+    /// Quick check whether a path points to a directory.
+    static func isDirectory(_ path: String) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
     }
 }

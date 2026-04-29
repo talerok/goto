@@ -2,12 +2,11 @@ import SwiftUI
 
 @main
 struct GotoApp: App {
-    @State private var appState = AppState()
+    @FocusedValue(\.appState) private var appState
 
     var body: some Scene {
-        Window("Goto", id: "main") {
-            ContentView()
-                .environment(appState)
+        WindowGroup(for: URL.self) { $url in
+            WindowRoot(initialURL: url)
         }
         .commands {
             appCommands
@@ -19,45 +18,110 @@ struct GotoApp: App {
     private var appCommands: some Commands {
         CommandGroup(replacing: .toolbar) {
             Button("Focus Address Bar") {
-                appState.addressBar.focusAndSelectAll()
+                appState?.addressBar.focusAndSelectAll()
             }
             .keyboardShortcut("l", modifiers: .command)
 
             Divider()
 
             Button("Back") {
-                appState.navigateBack()
+                appState?.navigateBack()
             }
             .keyboardShortcut("[", modifiers: .command)
-            .disabled(!appState.navigation.canGoBack)
+            .disabled(appState?.navigation.canGoBack != true)
 
             Button("Forward") {
-                appState.navigateForward()
+                appState?.navigateForward()
             }
             .keyboardShortcut("]", modifiers: .command)
-            .disabled(!appState.navigation.canGoForward)
+            .disabled(appState?.navigation.canGoForward != true)
 
             Button("Enclosing Folder") {
-                appState.navigateUp()
+                appState?.navigateUp()
             }
             .keyboardShortcut(.upArrow, modifiers: .command)
-            .disabled(!appState.navigation.canGoUp)
+            .disabled(appState?.navigation.canGoUp != true)
 
             Divider()
 
             Button("Toggle Hidden Files") {
-                appState.directory.showHiddenFiles.toggle()
+                appState?.directory.showHiddenFiles.toggle()
             }
             .keyboardShortcut(".", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .pasteboard) {
+            Button("Cut") {
+                NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil)
+            }
+            .keyboardShortcut("x", modifiers: .command)
+
+            Button("Copy") {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                    NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+                } else {
+                    appState?.copySelectedItems()
+                }
+            }
+            .keyboardShortcut("c", modifiers: .command)
+
+            Button("Paste") {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                    NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                } else {
+                    appState?.pasteItems()
+                }
+            }
+            .keyboardShortcut("v", modifiers: .command)
+
+            Button("Select All") {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                } else {
+                    appState?.selectAll()
+                }
+            }
+            .keyboardShortcut("a", modifiers: .command)
+
+            Divider()
+
             Button("Copy Path") {
+                guard let appState else { return }
                 let path = appState.navigation.currentDirectory.path(percentEncoded: false)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(path, forType: .string)
             }
             .keyboardShortcut("c", modifiers: [.command, .shift])
         }
+    }
+}
+
+// MARK: - Focused Value
+
+private struct FocusedAppStateKey: FocusedValueKey {
+    typealias Value = AppState
+}
+
+extension FocusedValues {
+    var appState: AppState? {
+        get { self[FocusedAppStateKey.self] }
+        set { self[FocusedAppStateKey.self] = newValue }
+    }
+}
+
+// MARK: - Per-Window Root
+
+struct WindowRoot: View {
+    @State private var appState: AppState
+
+    init(initialURL: URL?) {
+        _appState = State(initialValue: AppState(startingDirectory: initialURL))
+    }
+
+    var body: some View {
+        ContentView()
+            .environment(appState)
+            .focusedValue(\.appState, appState)
+            .navigationTitle(appState.navigation.currentDirectory.lastPathComponent)
     }
 }

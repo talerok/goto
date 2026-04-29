@@ -1,7 +1,9 @@
 import SwiftUI
 
+private let toolbarHeight: CGFloat = 50
+
 /// Toolbar navigation button with hover highlight.
-struct NavButton: View {
+private struct NavButton: View {
     let icon: String
     let help: String
     let disabled: Bool
@@ -17,7 +19,7 @@ struct NavButton: View {
                 .contentShape(Rectangle())
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(isHovering && !disabled ? .white.opacity(0.08) : .clear)
+                        .fill(isHovering && !disabled ? Color.primary.opacity(0.06) : .clear)
                 )
         }
         .buttonStyle(.plain)
@@ -76,16 +78,14 @@ struct ContentView: View {
                     }
                 )
                 .padding(.horizontal, 10)
-                .offset(y: 50)
+                .offset(y: toolbarHeight)
             }
         }
         .task {
             appState.addressBar.syncToPath(
                 appState.navigation.currentDirectory.path(percentEncoded: false))
+            appState.startWatching()
             await appState.loadCurrentDirectory()
-        }
-        .onChange(of: appState.directory.showHiddenFiles) {
-            Task { await appState.loadCurrentDirectory() }
         }
         .onKeyPress(.space) {
             guard !appState.addressBar.isFocused, appState.renamingItem == nil else { return .ignored }

@@ -1,23 +1,27 @@
 import Foundation
 
+private let fsEventsLatency: CFTimeInterval = 0.5
+
 /// Monitors a directory for file system changes using FSEvents.
-/// Calls the `onChange` handler when changes are detected.
+/// Thread safety: `stream` is only accessed from the main thread (via @MainActor AppState).
+/// `onChange` is protected by `lock` since it's written from main thread and read from the FSEvents queue.
 final class FSEventsMonitor: @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "com.goto.fsevents", qos: .utility)
-    fileprivate var onChange: (@Sendable () -> Void)?
+    private let lock = NSLock()
+    private var onChange: (@Sendable () -> Void)?
 
     /// Start monitoring a directory.
     /// - Parameters:
     ///   - url: The directory to watch.
-    ///   - handler: Called when any change is detected in the directory.
+    ///   - handler: Called on the FSEvents queue when any change is detected.
     func start(watching url: URL, handler: @escaping @Sendable () -> Void) {
         stop()
-        onChange = handler
+        lock.withLock { onChange = handler }
 
         let path = url.path(percentEncoded: false)
         var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
+        context.info = Unmanaged.passRetained(self).toOpaque()
 
         let flags: FSEventStreamCreateFlags =
             UInt32(kFSEventStreamCreateFlagUseCFTypes) |
@@ -30,9 +34,14 @@ final class FSEventsMonitor: @unchecked Sendable {
             &context,
             [path] as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.5, // latency in seconds
+            fsEventsLatency,
             flags
-        ) else { return }
+        ) else {
+            // Balance the passRetained above
+            Unmanaged<FSEventsMonitor>.fromOpaque(context.info!).release()
+            lock.withLock { onChange = nil }
+            return
+        }
 
         self.stream = stream
         FSEventStreamSetDispatchQueue(stream, queue)
@@ -46,11 +55,21 @@ final class FSEventsMonitor: @unchecked Sendable {
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
         self.stream = nil
-        onChange = nil
+        lock.withLock { onChange = nil }
+        // Balance the passRetained from start()
+        Unmanaged.passUnretained(self).release()
+    }
+
+    /// Called from the FSEvents callback on `queue`.
+    fileprivate func handleEvent() {
+        let handler = lock.withLock { onChange }
+        handler?()
     }
 
     deinit {
-        stop()
+        // passRetained in start() prevents deallocation while the stream is active.
+        // stop() releases the retained reference, allowing deallocation when the
+        // last external reference (AppState) drops.
     }
 }
 
@@ -64,5 +83,5 @@ private func fsEventsCallback(
 ) {
     guard let info = clientCallBackInfo else { return }
     let monitor = Unmanaged<FSEventsMonitor>.fromOpaque(info).takeUnretainedValue()
-    monitor.onChange?()
+    monitor.handleEvent()
 }

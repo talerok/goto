@@ -39,6 +39,8 @@ final class QuickLookCoordinator: NSObject, QLPreviewPanelDataSource, QLPreviewP
     }
 
     nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
-        MainActor.assumeIsolated { previewURLs[index] as NSURL }
+        let urls = MainActor.assumeIsolated { previewURLs }
+        guard urls.indices.contains(index) else { return nil }
+        return urls[index] as NSURL
     }
 }

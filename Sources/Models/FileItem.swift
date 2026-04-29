@@ -16,7 +16,11 @@ struct FileItem: Identifiable, Hashable, Sendable {
     }
 
     static func == (lhs: FileItem, rhs: FileItem) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id &&
+        lhs.isHidden == rhs.isHidden &&
+        lhs.isSymlink == rhs.isSymlink &&
+        lhs.size == rhs.size &&
+        lhs.dateModified == rhs.dateModified
     }
 }
 

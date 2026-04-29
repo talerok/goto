@@ -9,12 +9,13 @@ final class NavigationState {
     private(set) var forwardStack: [URL] = []
 
     /// Paths typed into the address bar, persisted across launches.
-    var addressBarHistory: [String] {
+    private(set) var addressBarHistory: [String] {
         didSet { persistHistory() }
     }
 
     private static let historyKey = "addressBarHistory"
     private static let maxHistory = 100
+    private static let maxBackStack = 100
 
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
@@ -30,6 +31,9 @@ final class NavigationState {
     func navigate(to url: URL) {
         guard url != currentDirectory else { return }
         backStack.append(currentDirectory)
+        if backStack.count > Self.maxBackStack {
+            backStack.removeFirst(backStack.count - Self.maxBackStack)
+        }
         forwardStack.removeAll()
         currentDirectory = url
     }
@@ -39,11 +43,14 @@ final class NavigationState {
         navigate(to: url)
 
         let path = url.path(percentEncoded: false)
-        addressBarHistory.removeAll { $0 == path }
-        addressBarHistory.insert(path, at: 0)
-        if addressBarHistory.count > Self.maxHistory {
-            addressBarHistory = Array(addressBarHistory.prefix(Self.maxHistory))
+        // Build new history in a local var, then assign once to trigger a single didSet/persist.
+        var updated = addressBarHistory
+        updated.removeAll { $0 == path }
+        updated.insert(path, at: 0)
+        if updated.count > Self.maxHistory {
+            updated = Array(updated.prefix(Self.maxHistory))
         }
+        addressBarHistory = updated
     }
 
     func goBack() {
