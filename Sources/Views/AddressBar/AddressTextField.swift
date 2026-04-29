@@ -8,6 +8,7 @@ struct AddressTextField: NSViewRepresentable {
     @Binding var wantsFocus: Bool
     @Binding var isFocused: Bool
     var onCommit: () -> Void
+    var onCommitNewWindow: () -> Void
     var onCancel: () -> Void
     var onTab: () -> Void
     var onArrowUp: () -> Void
@@ -77,7 +78,11 @@ struct AddressTextField: NSViewRepresentable {
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             switch commandSelector {
             case #selector(NSResponder.insertNewline(_:)):
-                parent.onCommit()
+                if NSEvent.modifierFlags.contains(.shift) {
+                    parent.onCommitNewWindow()
+                } else {
+                    parent.onCommit()
+                }
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
                 parent.onCancel()

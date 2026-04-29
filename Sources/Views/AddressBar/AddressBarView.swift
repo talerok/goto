@@ -3,6 +3,7 @@ import SwiftUI
 /// Always-visible address bar. Autocomplete overlay is handled by ContentView.
 struct AddressBarView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 6) {
@@ -24,6 +25,7 @@ struct AddressBarView: View {
                     set: { appState.addressBar.isFocused = $0 }
                 ),
                 onCommit: commitNavigation,
+                onCommitNewWindow: commitNewWindow,
                 onCancel: {
                     appState.addressBar.revert(
                         to: appState.navigation.currentDirectory.path(percentEncoded: false))
@@ -63,17 +65,18 @@ struct AddressBarView: View {
         )
     }
 
-    private func commitNavigation() {
-        // If a suggestion is highlighted, accept it and stay in edit mode
+    /// Resolve the address bar text to a valid directory URL.
+    /// Accepts a pending suggestion first; returns nil if path is invalid.
+    private func resolveAddress() -> URL? {
         if appState.addressBar.selectedSuggestionIndex != nil {
             appState.addressBar.acceptSelectedSuggestion()
             appState.addressBar.updateSuggestions(relativeTo: appState.navigation.currentDirectory)
-            return
+            return nil
         }
 
         let text = appState.addressBar.text
         guard let resolved = PathResolver.resolve(
-            text, relativeTo: appState.navigation.currentDirectory) else { return }
+            text, relativeTo: appState.navigation.currentDirectory) else { return nil }
 
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(
@@ -81,13 +84,29 @@ struct AddressBarView: View {
 
         if !exists || !isDir.boolValue {
             NSSound.beep()
-            return
+            return nil
         }
 
+        return resolved
+    }
+
+    private func commitNavigation() {
+        guard let resolved = resolveAddress() else { return }
         appState.addressBar.dismissSuggestions()
         Task { await appState.navigateFromAddressBar(to: resolved) }
         DispatchQueue.main.async {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
+    }
+
+    private func commitNewWindow() {
+        guard let resolved = resolveAddress() else { return }
+        appState.addressBar.dismissSuggestions()
+        appState.addressBar.revert(
+            to: appState.navigation.currentDirectory.path(percentEncoded: false))
+        DispatchQueue.main.async {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
+        openWindow(value: resolved)
     }
 }
