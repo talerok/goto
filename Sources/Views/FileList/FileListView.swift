@@ -16,8 +16,6 @@ struct FileListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = appState.directory.error {
                 errorView(error)
-            } else if appState.directory.items.isEmpty {
-                emptyView
             } else {
                 NativeFileTableView(
                     items: appState.directory.items,
@@ -55,24 +53,5 @@ struct FileListView: View {
                 .padding(.horizontal, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "folder")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text("Empty Folder")
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            appState.dropItems(
-                providers: providers,
-                to: appState.navigation.currentDirectory,
-                asCopy: true
-            )
-            return true
-        }
     }
 }

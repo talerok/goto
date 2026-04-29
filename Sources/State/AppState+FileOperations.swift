@@ -62,7 +62,10 @@ extension AppState {
     // MARK: - Rename
 
     func startRenaming(_ item: FileItem) {
-        cancelRename()          // reset stale state (e.g. after Escape via abortEditing)
+        // Reset stale state without restarting FSEvents (we're about to stop them anyway).
+        renamingItem = nil
+        renameText = ""
+        stopWatching()          // pause FSEvents so reloadData doesn't destroy the field editor
         renamingItem = item
         renameText = item.name
     }
@@ -95,8 +98,10 @@ extension AppState {
     }
 
     func cancelRename() {
+        let wasRenaming = renamingItem != nil
         renamingItem = nil
         renameText = ""
+        if wasRenaming { startWatching() }  // resume FSEvents after rename ends
     }
 
     // MARK: - Copy / Paste
@@ -129,6 +134,51 @@ extension AppState {
             if failCount > 0 {
                 directory.error = "Paste failed for \(failCount) item\(failCount == 1 ? "" : "s")."
             }
+        }
+    }
+
+    // MARK: - Create New Items
+
+    func createNewFolder() {
+        dismissSearch()
+        let dest = FileSystemService.uniqueNewItemURL(name: "untitled folder", in: navigation.currentDirectory)
+        let targetName = dest.lastPathComponent
+        Task {
+            do {
+                try await FileSystemService.createFolder(at: dest)
+            } catch {
+                directory.error = "Failed to create folder: \(error.localizedDescription)"
+                return
+            }
+            await loadCurrentDirectory()
+            await selectAndRenameNewItem(named: targetName)
+        }
+    }
+
+    func createNewFile() {
+        dismissSearch()
+        let dest = FileSystemService.uniqueNewItemURL(name: "untitled", in: navigation.currentDirectory)
+        let targetName = dest.lastPathComponent
+        Task {
+            do {
+                try await FileSystemService.createFile(at: dest)
+            } catch {
+                directory.error = "Failed to create file: \(error.localizedDescription)"
+                return
+            }
+            await loadCurrentDirectory()
+            await selectAndRenameNewItem(named: targetName)
+        }
+    }
+
+    /// Select a newly created item and start rename after the UI settles.
+    private func selectAndRenameNewItem(named targetName: String) async {
+        guard let item = directory.items.first(where: { $0.name == targetName }) else { return }
+        selection = [item.id]
+        // Brief delay for NSTableView to create cell views after reloadData.
+        try? await Task.sleep(for: .milliseconds(250))
+        if let freshItem = directory.items.first(where: { $0.name == targetName }) {
+            startRenaming(freshItem)
         }
     }
 

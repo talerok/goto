@@ -205,6 +205,46 @@ enum FileSystemService {
         return dest
     }
 
+    /// Create a new empty directory.
+    static func createFolder(at url: URL) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Create a new empty file.
+    static func createFile(at url: URL) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                if FileManager.default.createFile(atPath: url.path(percentEncoded: false), contents: nil) {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: CocoaError(.fileWriteUnknown))
+                }
+            }
+        }
+    }
+
+    /// Generate a unique URL for a new item, appending " 2", " 3", etc. if the name already exists.
+    static func uniqueNewItemURL(name: String, in directory: URL) -> URL {
+        var dest = directory.appending(path: name)
+        var counter = 2
+        let fm = FileManager.default
+
+        while fm.fileExists(atPath: dest.path(percentEncoded: false)) {
+            dest = directory.appending(path: "\(name) \(counter)")
+            counter += 1
+        }
+        return dest
+    }
+
     /// Quick check whether a path points to a directory.
     static func isDirectory(_ path: String) -> Bool {
         var isDir: ObjCBool = false

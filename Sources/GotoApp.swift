@@ -59,6 +59,18 @@ struct GotoApp: App {
                 appState?.toggleSearch()
             }
             .keyboardShortcut("f", modifiers: .command)
+
+            Divider()
+
+            Button("New Folder") {
+                appState?.createNewFolder()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+
+            Button("New File") {
+                appState?.createNewFile()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
         }
 
         CommandGroup(replacing: .pasteboard) {

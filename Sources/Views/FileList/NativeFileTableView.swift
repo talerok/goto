@@ -453,6 +453,11 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             addMenuItem(to: menu, title: "Get Info", action: #selector(ctxGetInfo(_:)), representedObject: item)
         }
 
+        // Section 5: Create new items (always visible)
+        menu.addItem(.separator())
+        addMenuItem(to: menu, title: "New Folder", action: #selector(ctxNewFolder))
+        addMenuItem(to: menu, title: "New File", action: #selector(ctxNewFile))
+
         return menu
     }
 
@@ -585,30 +590,50 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         FileSystemService.showGetInfo(item.url)
     }
 
+    @objc private func ctxNewFolder() {
+        parent.appState.createNewFolder()
+    }
+
+    @objc private func ctxNewFile() {
+        parent.appState.createNewFile()
+    }
+
     // MARK: - Inline Rename
 
     func handleRenameState() {
         guard let tv = tableView else { return }
 
         if let renamingItem = parent.appState.renamingItem {
+            // Detect ESC: we set up editing before, but the field editor is gone
+            // (abortEditing doesn't post controlTextDidEndEditing).
+            if let etf = editingTextField, etf.currentEditor() == nil {
+                etf.isEditable = false
+                etf.delegate = nil
+                editingTextField = nil
+                parent.appState.cancelRename()
+                return
+            }
+
+            // Already editing — skip
+            if editingTextField?.currentEditor() != nil { return }
+
             guard let row = currentItems.firstIndex(where: { $0.id == renamingItem.id }) else {
                 parent.appState.cancelRename()
                 return
             }
             let col = tv.column(withIdentifier: ColumnID.name)
-            guard col >= 0,
-                  let cell = tv.view(atColumn: col, row: row, makeIfNecessary: false) as? NSTableCellView,
-                  let tf = cell.textField else { return }
+            guard col >= 0 else { return }
 
-            // Already editing this cell — skip
-            guard tf.currentEditor() == nil else { return }
+            tv.scrollRowToVisible(row)
+
+            guard let cell = tv.view(atColumn: col, row: row, makeIfNecessary: true) as? NSTableCellView,
+                  let tf = cell.textField else { return }
 
             editingTextField = tf
             tf.isEditable = true
             tf.delegate = self
             tf.stringValue = parent.appState.renameText
-            // Defer focus to next runloop — makeFirstResponder fails if called during
-            // a SwiftUI update while a context menu is still dismissing.
+
             let name = renamingItem.name
             let isDir = renamingItem.isDirectory
             DispatchQueue.main.async { [weak self] in
@@ -616,7 +641,6 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
                 self?.selectStem(in: tf, name: name, isDirectory: isDir)
             }
         } else if let tf = editingTextField {
-            // Clean up after Escape (abortEditing doesn't post controlTextDidEndEditing)
             tf.isEditable = false
             tf.delegate = nil
             editingTextField = nil
