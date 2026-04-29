@@ -14,8 +14,10 @@ Minimalist file manager for macOS with a keyboard-first workflow and an editable
 - **Inline rename** — select a file and rename from context menu or F2
 - **Copy & Paste** files (Cmd+C / Cmd+V)
 - **Drag & Drop** — drag files out, drop files into folders
+- **Open With submenu** — system-recommended apps, user-configured defaults per extension/folder
+- **File associations** (Cmd+,) — Settings window for mapping extensions and folders to preferred apps
 - **Context menu** — Open, Open With, Open in New Window, Reveal in Finder, Rename, Copy, Paste, Copy Path, Move to Trash, Get Info
-- **Multi-window** — open directories in new windows
+- **Multi-window** — open directories in new windows; Shift+Enter in address bar opens path in a new window
 - **FSEvents monitoring** — directory contents update automatically
 - **Path resolution** — supports `~`, `$ENV_VARS`, relative paths
 
@@ -38,6 +40,8 @@ Minimalist file manager for macOS with a keyboard-first workflow and an editable
 | `Cmd+Shift+C` | Copy path |
 | `Cmd+A` | Select all |
 | `Cmd+N` | New window |
+| `Shift+Enter` | Open address bar path in new window |
+| `Cmd+,` | Settings (file associations) |
 
 ## Requirements
 
@@ -61,11 +65,12 @@ Sources/
   GotoApp.swift              App entry, window, menu commands
   Models/                    FileItem, SortCriteria
   State/                     AppState, NavigationState, DirectoryState, AddressBarState
-  Services/                  FileSystemService, PathResolver, FSEventsMonitor, IconProvider, QuickLookCoordinator
+  Services/                  FileSystemService, FileAssociationService, PathResolver, FSEventsMonitor, IconProvider, QuickLookCoordinator
   Views/
     ContentView.swift        Main layout
     FileList/                NSTableView, search bar, context menu
     AddressBar/              TextField, autocomplete popover
+    Settings/                File association preferences
 ```
 
 ## License
