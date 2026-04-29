@@ -512,7 +512,10 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let tv = tableView else { return }
 
         if let renamingItem = parent.appState.renamingItem {
-            guard let row = currentItems.firstIndex(where: { $0.id == renamingItem.id }) else { return }
+            guard let row = currentItems.firstIndex(where: { $0.id == renamingItem.id }) else {
+                parent.appState.cancelRename()
+                return
+            }
             let col = tv.column(withIdentifier: ColumnID.name)
             guard col >= 0,
                   let cell = tv.view(atColumn: col, row: row, makeIfNecessary: false) as? NSTableCellView,

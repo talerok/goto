@@ -24,6 +24,11 @@ final class DirectoryState {
         didSet { applyFilterAndSort() }
     }
 
+    /// Current search filter text. Empty means no filter.
+    var searchText = "" {
+        didSet { applyFilterAndSort() }
+    }
+
     /// Load the contents of a directory.
     func load(directory url: URL) async {
         loadGeneration += 1
@@ -51,11 +56,14 @@ final class DirectoryState {
         isLoading = false
     }
 
-    /// Re-apply the current hidden-file filter and sort criteria to cached raw items.
+    /// Re-apply the current hidden-file filter, search filter, and sort criteria to cached raw items.
     func applyFilterAndSort() {
         var filtered = rawItems
         if !showHiddenFiles {
             filtered = filtered.filter { !$0.isHidden }
+        }
+        if !searchText.isEmpty {
+            filtered = filtered.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
         }
         items = filtered.sorted(by: sort.comparator)
     }

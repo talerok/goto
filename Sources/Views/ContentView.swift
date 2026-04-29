@@ -52,6 +52,10 @@ struct ContentView: View {
                               disabled: !appState.navigation.canGoUp) {
                         appState.navigateUp()
                     }
+                    NavButton(icon: "magnifyingglass", help: "Search (⌘F)",
+                              disabled: false) {
+                        appState.toggleSearch()
+                    }
                 }
 
                 AddressBarView()
@@ -61,6 +65,10 @@ struct ContentView: View {
             .background(.bar)
 
             Divider()
+            if appState.isSearching {
+                SearchBarView()
+                Divider()
+            }
             FileListView()
         }
         .frame(minWidth: 500, minHeight: 300)
@@ -88,22 +96,22 @@ struct ContentView: View {
             await appState.loadCurrentDirectory()
         }
         .onKeyPress(.space) {
-            guard !appState.addressBar.isFocused, appState.renamingItem == nil else { return .ignored }
+            guard !appState.addressBar.isFocused, !appState.isSearching, appState.renamingItem == nil else { return .ignored }
             appState.toggleQuickLook()
             return .handled
         }
         .onKeyPress(.delete) {
-            guard !appState.addressBar.isFocused, appState.renamingItem == nil else { return .ignored }
+            guard !appState.addressBar.isFocused, !appState.isSearching, appState.renamingItem == nil else { return .ignored }
             appState.trashSelectedItems()
             return .handled
         }
         .onKeyPress(.return) {
-            guard !appState.addressBar.isFocused, appState.renamingItem == nil else { return .ignored }
+            guard !appState.addressBar.isFocused, !appState.isSearching, appState.renamingItem == nil else { return .ignored }
             appState.openSelectedItems()
             return .handled
         }
         .onKeyPress(characters: .letters.union(.decimalDigits).union(.punctuationCharacters).union(.symbols)) { press in
-            guard !appState.addressBar.isFocused, appState.renamingItem == nil else { return .ignored }
+            guard !appState.addressBar.isFocused, !appState.isSearching, appState.renamingItem == nil else { return .ignored }
             guard let char = press.characters.first else { return .ignored }
             appState.typeAhead(character: char)
             return .handled

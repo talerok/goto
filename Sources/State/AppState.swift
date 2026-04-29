@@ -30,6 +30,29 @@ final class AppState {
     /// Text in the rename field.
     var renameText = ""
 
+    /// Whether the search bar is visible.
+    var isSearching = false
+
+    /// Whether the search field wants focus (one-shot trigger).
+    var searchWantsFocus = false
+
+    /// Show or hide the in-folder search bar.
+    func toggleSearch() {
+        isSearching.toggle()
+        if isSearching {
+            selection.removeAll()
+            searchWantsFocus = true
+        } else {
+            directory.searchText = ""
+        }
+    }
+
+    /// Dismiss the search bar and clear the filter.
+    func dismissSearch() {
+        isSearching = false
+        directory.searchText = ""
+    }
+
     // MARK: - FSEvents
 
     private let fsMonitor = FSEventsMonitor()
@@ -116,6 +139,7 @@ final class AppState {
     private func prepareForNavigation() {
         selection.removeAll()
         resetTypeAhead()
+        dismissSearch()
         syncAddressBar()
         startWatching()
     }

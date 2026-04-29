@@ -48,6 +48,13 @@ struct GotoApp: App {
                 appState?.directory.showHiddenFiles.toggle()
             }
             .keyboardShortcut(".", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Find") {
+                appState?.toggleSearch()
+            }
+            .keyboardShortcut("f", modifiers: .command)
         }
 
         CommandGroup(replacing: .pasteboard) {
@@ -57,7 +64,7 @@ struct GotoApp: App {
             .keyboardShortcut("x", modifiers: .command)
 
             Button("Copy") {
-                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil || appState?.isSearching == true {
                     NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
                 } else {
                     appState?.copySelectedItems()
@@ -66,7 +73,7 @@ struct GotoApp: App {
             .keyboardShortcut("c", modifiers: .command)
 
             Button("Paste") {
-                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil || appState?.isSearching == true {
                     NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
                 } else {
                     appState?.pasteItems()
@@ -75,7 +82,7 @@ struct GotoApp: App {
             .keyboardShortcut("v", modifiers: .command)
 
             Button("Select All") {
-                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil {
+                if appState?.addressBar.isFocused == true || appState?.renamingItem != nil || appState?.isSearching == true {
                     NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
                 } else {
                     appState?.selectAll()
