@@ -546,16 +546,16 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Select just the filename stem (before the last dot) in the text field.
     private func selectStem(in tf: NSTextField, name: String, isDirectory: Bool) {
-        // Directories and dotfiles: select all
+        guard let editor = tf.currentEditor() else { return }
+        // Directories, dotfiles, extensionless files: select all
         let ext = (name as NSString).pathExtension
         if isDirectory || ext.isEmpty || name.hasPrefix(".") {
-            tf.selectText(nil)
+            editor.selectedRange = NSRange(location: 0, length: name.count)
             return
         }
         let stemLength = name.count - ext.count - 1 // exclude the dot
-        guard stemLength > 0,
-              let editor = tf.currentEditor() else {
-            tf.selectText(nil)
+        guard stemLength > 0 else {
+            editor.selectedRange = NSRange(location: 0, length: name.count)
             return
         }
         editor.selectedRange = NSRange(location: 0, length: stemLength)
