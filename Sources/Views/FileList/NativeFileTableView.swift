@@ -271,8 +271,8 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 
     private func loadIcon(for item: FileItem, in tableView: NSTableView, row: Int) {
         let itemId = item.id
-        Task {
-            let icon = await IconProvider.icon(for: item)
+        Task { @MainActor in
+            let icon = IconProvider.icon(for: item)
             self.iconCache[itemId] = icon
             guard row < self.currentItems.count, self.currentItems[row].id == itemId else { return }
             let col = tableView.column(withIdentifier: ColumnID.name)

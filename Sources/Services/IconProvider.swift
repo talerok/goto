@@ -2,8 +2,9 @@ import AppKit
 
 private let iconDisplaySize = NSSize(width: 18, height: 18)
 
-/// Provides file/folder icons with caching. Icons are loaded off the main thread.
-actor IconProvider {
+/// Provides file/folder icons with caching.
+@MainActor
+final class IconProvider {
     /// Shared singleton.
     private static let shared = IconProvider()
 
@@ -12,12 +13,12 @@ actor IconProvider {
     private static let maxCacheSize = 500
 
     /// Get the icon for a file item. Returns a cached icon if available.
-    static func icon(for item: FileItem) async -> NSImage {
-        await shared.getIcon(for: item)
+    static func icon(for item: FileItem) -> NSImage {
+        shared.getIcon(for: item)
     }
 
-    private func getIcon(for item: FileItem) async -> NSImage {
-        let cacheKey = self.cacheKey(for: item)
+    private func getIcon(for item: FileItem) -> NSImage {
+        let cacheKey = cacheKey(for: item)
 
         if let cached = cache[cacheKey] {
             return cached
@@ -29,9 +30,7 @@ actor IconProvider {
         }
 
         let path = item.url.path(percentEncoded: false)
-        let icon = await MainActor.run {
-            NSWorkspace.shared.icon(forFile: path)
-        }
+        let icon = NSWorkspace.shared.icon(forFile: path)
         icon.size = iconDisplaySize
         cache[cacheKey] = icon
         return icon
